@@ -305,8 +305,14 @@ void MainWindow::received_frame(unsigned char frame_type, int payload_len, unsig
 {
     qDebug() << "Main: Frame type: " << frame_type;
     qDebug() << "Main: Payload Length: " << payload_len;
-    for(int i=0; i<payload_len; i++)
+//    for(int i=0; i<payload_len; i++)
+//    {
+//        qDebug() << payload[i];
+//    }
+    switch(frame_type)
     {
-        qDebug() << payload[i];
+        case 'p':
+
+        break;
     }
 }
