@@ -1,0 +1,318 @@
+#include "mainwindow.h"
+#include "ui_mainwindow.h"
+
+MainWindow::MainWindow(QWidget *parent) :
+    QMainWindow(parent),
+    ui(new Ui::MainWindow)
+{
+    ui->setupUi(this);
+    leftpressed = false;
+    rightpressed = false;
+
+    gridwidth = 0;
+    gridheight = 0;
+
+    startlocation = false;
+    startlocationSet = false;
+    endlocation = false;
+    endlocationSet = false;
+    obstaclecount = 0;
+    selectobstacle = false;
+    obstaclesSet = false;
+
+    thread = new Thread(this);
+    connect(thread, SIGNAL(usb_byte(unsigned char)), this, SLOT(thread_byte(unsigned char)));
+    connect(thread, SIGNAL(passframetoMain(unsigned char, int, unsigned char*)), this, SLOT(received_frame(unsigned char, int, unsigned char*)));
+    thread->start();
+}
+
+MainWindow::~MainWindow()
+{
+    delete ui;
+}
+
+
+void MainWindow::paintEvent(QPaintEvent *e)
+{
+    QPainter painter(this);
+
+    QPen redpen(Qt::red);
+    redpen.setWidth(2);
+    QPen blackpen(Qt::black);
+    blackpen.setWidth(1);
+    QPen obstaclepen(Qt::black);
+    obstaclepen.setWidth(25);
+
+    QBrush whitebrush(Qt::white);
+    QBrush greenbrush(Qt::green);
+    QBrush bluebrush(Qt::blue);
+
+    QPen bluepen(Qt::blue);
+    bluepen.setWidth(1);
+
+    int startx = 10, starty = 10;
+    int endx = 400 + startx, endy = 400 + starty;
+    int framewidth = endx-startx, frameheight = endy-starty;
+    gridwidth = framewidth;
+    gridheight = frameheight;
+
+    QRect frame(startx, starty, framewidth, frameheight);
+
+    painter.fillRect(frame, whitebrush);
+    painter.setPen(redpen);
+    painter.drawRect(frame);
+
+    painter.setPen(redpen);
+    // draw columns
+    int colnum = 10;
+    int gridColwidth = framewidth/colnum;
+
+    this->setColWidth(gridColwidth );
+
+    QPoint columnstart, columnend;
+    for(int i=1; i<colnum; i++){
+        columnstart.setX(startx + gridColwidth*i);
+        columnstart.setY(starty);
+        columnend.setX(startx + gridColwidth*i);
+        columnend.setY(endy);
+
+        painter.drawLine(columnstart, columnend);
+    }
+    // draw rows
+    int rownum = 10;
+    int gridRowwidth = frameheight/rownum;
+    this->setRowWidth(gridRowwidth );
+    QPoint rowstart, rowend;
+    for(int i=1; i<rownum; i++){
+        rowstart.setX(startx);
+        rowstart.setY(starty+ gridRowwidth*i);
+        rowend.setX(endx);
+        rowend.setY(starty + gridRowwidth*i);
+
+        painter.drawLine(rowstart, rowend);
+    }
+
+    if(leftpressed == true || rightpressed == true){
+        leftpressed = false;
+        rightpressed = false;
+        if((startlocation == true) || (startlocationSet == true))
+        {
+            painter.setBrush(greenbrush);
+            painter.setPen(blackpen);
+            painter.drawEllipse(startPoint, 10,10);
+            startlocation = false;
+            startlocationSet = true;
+        }
+        if((endlocation == true) || (endlocationSet == true))
+        {
+            painter.setBrush(bluebrush);
+            painter.setPen(blackpen);
+            painter.drawEllipse(endPoint, 10,10);
+            endlocation = false;
+            endlocationSet = true;
+        }
+        if((selectobstacle == true) || (obstaclesSet == true))
+        {
+            painter.setPen(obstaclepen);
+            for(int i=0; i<obstaclecount; i++)
+            {
+                painter.drawPoint(obstacles[i]);
+            }
+        }
+    }
+    //    else if(rightpressed == true){
+    //        rightpressed == false;
+    //    }
+
+}
+
+
+void MainWindow::setColWidth(int col)
+{
+    colwidth = col;
+}
+
+int MainWindow::getColWidth()
+{
+    return colwidth;
+}
+
+void MainWindow::setRowWidth(int row)
+{
+    rowwidth = row;
+}
+
+int MainWindow::getRowWidth()
+{
+    return rowwidth;
+}
+
+void MainWindow::mousePressEvent(QMouseEvent *mev){
+
+    qDebug() << "Grid width: " << gridwidth;
+
+    if(mev->x() > gridwidth || mev->x() < 10 || mev->y() > gridheight || mev->y() < 10){
+        qDebug() << "Click outside frame";
+    }
+    else
+    {
+        GridCoords *gridcoord = new GridCoords();
+        gridcoord->setGridCoord(10, this->getColWidth(),mev->x(), this->getRowWidth(), mev->y());
+        QPoint gridpoint = gridcoord->getGridCoord();
+
+        GridCoords *maincoord = new GridCoords();
+        maincoord->setMainCoord(10, this->getColWidth(), gridpoint.x(), this->getRowWidth(), gridpoint.y());
+        QPoint mainpoint = maincoord->getMainCoord();
+
+        qDebug() << "Grid: " << gridpoint;
+        qDebug() << "Main: " << mainpoint;
+
+        if(mev->buttons() & Qt::LeftButton){
+            qDebug() << "left button pressed";
+            leftpressed = true;
+            rightpressed = true;
+            if(startlocation == true)
+            {
+                startPoint = mainpoint;
+                grid_startPoint = gridpoint;
+            }
+            else if(endlocation == true)
+            {
+                endPoint = mainpoint;
+                grid_endPoint = gridpoint;
+            }
+            else if((selectobstacle == true))
+            {
+                obstacles[obstaclecount] = mainpoint;
+                grid_obstacles[obstaclecount] = gridpoint;
+                obstaclecount++;
+                ui->obstacle_count_label->setText(QString::number(obstaclecount));
+                qDebug() << "Obstacles: " << obstaclecount;
+            }
+        }
+        else if(mev->buttons() & Qt::RightButton)
+        {
+            qDebug() << "right button pressed";
+            rightpressed = true;
+
+            // remove obstacles, start locations and finish locations when pressed
+            if((selectobstacle == true))
+            {
+                //obstacles[obstaclecount] = mainpoint;
+                obstacles[obstaclecount].isNull();
+                obstaclecount--;
+                ui->obstacle_count_label->setText(QString::number(obstaclecount));
+                qDebug() << "Obstacles: " << obstaclecount;
+            }
+
+        }
+
+        update();   // updates the painted GUI
+    }
+}
+
+void MainWindow::on_start_loc_Button_clicked()
+{
+    if(selectobstacle == false)
+    {
+        startlocation = true;
+    }
+    else
+    {
+        QMessageBox msgBox;
+        msgBox.warning(this,"Obstacles not set", "Please finish selecting all obtsacles");
+        qDebug() << "QMessageBox: please finish selecting all obtsacles";
+    }
+}
+
+void MainWindow::on_end_loc_Button_clicked()
+{
+    if(selectobstacle == false){
+        endlocation = true;
+    }
+    else
+    {
+        QMessageBox msgBox;
+        msgBox.warning(this,"Obstacles not set", "Please finish selecting all obtsacles");
+        qDebug() << "QMessageBox: please finish selecting all obtsacles";
+    }
+}
+
+void MainWindow::on_start_obstacle_Button_clicked()
+{
+    selectobstacle = true;
+}
+
+void MainWindow::on_set_obs_Button_clicked()
+{
+    selectobstacle = false;
+    obstaclesSet = true;
+}
+
+void MainWindow::thread_byte(unsigned char tbyte)
+{
+    qDebug() << "Main: Byte from thread -> " << (char)tbyte;
+    if(tbyte == 'a')
+    {
+        QString frame = "hello";
+        thread->send_usb_frame('a', frame);
+    }
+}
+
+void MainWindow::on_debug_Button_clicked()
+{
+    //    QString frame = "hello";
+    //    thread->send_usb_frame('a', frame);
+    unsigned char pay[] = {1,2,3,4,5,6,7,8,9,10};
+    int pay_len = sizeof(pay)/sizeof(pay[0]);
+    unsigned char frametype = 'h';  // send obstacle frame
+    thread->send_usb_byte(frametype, pay_len, pay);
+
+}
+
+void MainWindow::on_path_plan_Button_clicked()
+{
+    // check that there is a start location and finish location selected
+    qDebug() << "Sending locations to rpi" << grid_startPoint;
+    qDebug() << "bool startlocation: " << startlocation;
+    if(startlocationSet == true) {
+        thread->send_usb_frame('s', grid_startPoint);
+    }
+    else qDebug() << "No start location set";
+
+    usleep(100000);
+
+    if(endlocationSet == true) thread->send_usb_frame('f', grid_endPoint);
+    else  qDebug() << "No finish location set";
+
+    usleep(100000);
+    if(obstaclesSet == true)
+    {
+        unsigned char obstacle_arr[100] = {0};
+        for(int i=0; i<obstaclecount; i++)
+        {
+            int index = grid_obstacles[i].x() + grid_obstacles[i].y()*10;
+            qDebug() << grid_obstacles[i] << "-> " <<index;
+            obstacle_arr[index] = 1;
+        }
+        int obs_len = sizeof(obstacle_arr)/sizeof(obstacle_arr[0]);
+        thread->send_usb_byte('o', obs_len, obstacle_arr);
+    }
+    else  qDebug() << "No obstacle locations set";
+}
+
+void MainWindow::received_frame(unsigned char frame_type, int payload_len, unsigned char *payload)
+{
+    qDebug() << "Main: Frame type: " << frame_type;
+    qDebug() << "Main: Payload Length: " << payload_len;
+//    for(int i=0; i<payload_len; i++)
+//    {
+//        qDebug() << payload[i];
+//    }
+    switch(frame_type)
+    {
+        case 'p':
+        
+        break;
+    }
+}
