@@ -37,6 +37,9 @@ public:
     int obstaclecount;
     bool selectobstacle, obstaclesSet;
     QPoint obstaclePoint, obstacles[100], grid_obstacles[100];
+    QPoint gridPath[100], mainPath[100];
+    bool pathset, path;
+    int path_points_total;
 
 
 public slots:

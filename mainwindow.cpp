@@ -19,6 +19,9 @@ MainWindow::MainWindow(QWidget *parent) :
     obstaclecount = 0;
     selectobstacle = false;
     obstaclesSet = false;
+    pathset = false;
+    path = false;
+    path_points_total = 0;
 
     thread = new Thread(this);
     connect(thread, SIGNAL(usb_byte(unsigned char)), this, SLOT(thread_byte(unsigned char)));
@@ -38,10 +41,15 @@ void MainWindow::paintEvent(QPaintEvent *e)
 
     QPen redpen(Qt::red);
     redpen.setWidth(2);
+
     QPen blackpen(Qt::black);
     blackpen.setWidth(1);
+
     QPen obstaclepen(Qt::black);
     obstaclepen.setWidth(25);
+
+    QPen pathpen(QColor(235,205,9));
+    pathpen.setWidth(4);
 
     QBrush whitebrush(Qt::white);
     QBrush greenbrush(Qt::green);
@@ -92,7 +100,24 @@ void MainWindow::paintEvent(QPaintEvent *e)
         painter.drawLine(rowstart, rowend);
     }
 
-    if(leftpressed == true || rightpressed == true){
+    if(pathset == true || path == true)
+    {
+        qDebug() << "Pathing path";
+        // draw path
+        painter.setPen(pathpen);
+        int nextpt;
+        //painter.drawLine(mainPath[0], mainPath[2]);
+        for(int i=0; i<(path_points_total-1); i++)
+        {
+            nextpt = i+1;
+            painter.drawLine(mainPath[i], mainPath[nextpt]);
+        }
+        pathset = true;
+        path = false;
+    }
+
+    if(leftpressed == true || rightpressed == true || pathset == true || path == true){
+        qDebug() << "main paint";
         leftpressed = false;
         rightpressed = false;
         if((startlocation == true) || (startlocationSet == true))
@@ -120,9 +145,7 @@ void MainWindow::paintEvent(QPaintEvent *e)
             }
         }
     }
-    //    else if(rightpressed == true){
-    //        rightpressed == false;
-    //    }
+
 
 }
 
@@ -305,14 +328,32 @@ void MainWindow::received_frame(unsigned char frame_type, int payload_len, unsig
 {
     qDebug() << "Main: Frame type: " << frame_type;
     qDebug() << "Main: Payload Length: " << payload_len;
-//    for(int i=0; i<payload_len; i++)
-//    {
-//        qDebug() << payload[i];
-//    }
+    //    for(int i=0; i<payload_len; i++)
+    //    {
+    //        qDebug() << payload[i];
+    //    }
     switch(frame_type)
     {
-        case 'p':
+    case 'p':
+        int inc = 0;
+        //gridPath[100], mainPath[100];
 
+        GridCoords *maincoord = new GridCoords();
+        for(int i=0; i<payload_len; i++)
+        {
+            gridPath[inc].setX(payload[i]);
+            i++;
+            gridPath[inc].setY(payload[i]);
+            maincoord->setMainCoord(10, this->getColWidth(), gridPath[inc].x(), this->getRowWidth(), gridPath[inc].y());
+            mainPath[inc] = maincoord->getMainCoord();
+            qDebug() << "(" << gridPath[inc].x() << "," << gridPath[inc].y() << ")"
+                        << " (" << mainPath[inc].x() << "," << mainPath[inc].y() << ")";
+            inc++;
+        }
+        path_points_total = inc;
+        qDebug() << "Out of path loop";
+        path = true;
+        update();
         break;
     }
     // test
